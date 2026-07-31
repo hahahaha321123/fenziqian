@@ -718,6 +718,10 @@ function openPersonPage(name) {
   const recTotal = personRecs.filter(r=>r.type==='received').reduce((s,r)=>s+r.amount,0);
   const net = recTotal - sentTotal;
   const pendingCount = personRecs.filter(r=>r.status==='pending').length;
+  // 待随礼 = 我送出但对方还没还的（我欠别人的）
+  const pendingSent = personRecs.filter(r=>r.type==='sent'&&r.status==='pending').reduce((s,r)=>s+r.amount,0);
+  // 待收礼 = 对方送给我但我还没还的（别人欠我的）
+  const pendingRec = personRecs.filter(r=>r.type==='received'&&r.status==='pending').reduce((s,r)=>s+r.amount,0);
 
   // Header
   document.getElementById('personHeader').innerHTML = `
@@ -752,7 +756,8 @@ function openPersonPage(name) {
       <div class="person-stat-list">
         <div class="person-stat-row"><span class="person-stat-label">人情总支出</span><span class="person-stat-val">${formatCurrency(sentTotal)}</span></div>
         <div class="person-stat-row"><span class="person-stat-label">人情总收入</span><span class="person-stat-val">${formatCurrency(recTotal)}</span></div>
-        <div class="person-stat-row"><span class="person-stat-label">待回礼</span><span class="person-stat-val">${pendingCount} 笔</span></div>
+        <div class="person-stat-row"><span class="person-stat-label">待随礼</span><span class="person-stat-val" style="color:var(--primary)">${formatCurrency(pendingSent)}</span></div>
+        <div class="person-stat-row"><span class="person-stat-label">待收礼</span><span class="person-stat-val" style="color:var(--green)">${formatCurrency(pendingRec)}</span></div>
       </div>
     </div>`;
 
