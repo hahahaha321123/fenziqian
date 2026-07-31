@@ -1274,18 +1274,26 @@ function renderParsePreview(list){
   parsedRecords=list;
   const el=document.getElementById('parsePreview');
 
-  // Build flat relation list: 同事/朋友/同学/其他 + 妈妈亲戚/爸爸亲戚/婆家亲戚
-  const baseRels = CATEGORIES.filter(c=>c.key!=='home'&&c.key!=='relatives');
+  // Build flat relation list: 妈妈亲戚/爸爸亲戚/婆家亲戚/同事/同学/其他
+  const relOrderKeys = ['mom','dad','inlaw','colleagues','classmates','others'];
 
   el.innerHTML=`<div class="parse-count">已识别 ${list.length} 条，请核对无误后导入：</div>`+
     list.map((r,i)=>{
-      let relOpts = baseRels.map(c =>
-        `<option value="${c.key}" ${r.relation===c.key?'selected':''}>${c.name}</option>`
-      ).join('');
-      // 亲戚子分类作为平级选项（无缩进、无父级"亲戚"）
-      SUB_CATEGORIES.forEach(s => {
-        const sel = (r.relation==='relatives' && r.subRelation===s.key) ? 'selected' : '';
-        relOpts += `<option value="relatives|${s.key}" ${sel}>${s.name}</option>`;
+      let relOpts = '';
+      relOrderKeys.forEach(k => {
+        const sub = SUB_CATEGORIES.find(s=>s.key===k);
+        if(sub){
+          // 子分类：relatives|subKey
+          const sel = (r.relation==='relatives' && r.subRelation===k) ? 'selected' : '';
+          relOpts += `<option value="relatives|${k}" ${sel}>${sub.name}</option>`;
+        } else {
+          // 普通分类
+          const cat = CATEGORIES.find(c=>c.key===k);
+          if(cat){
+            const sel = (r.relation===k) ? 'selected' : '';
+            relOpts += `<option value="${k}" ${sel}>${cat.name}</option>`;
+          }
+        }
       });
 
       return `<div class="parse-item" data-i="${i}">
