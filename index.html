@@ -326,9 +326,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hira
   <div class="header-right">
     <div class="header-icon" onclick="openBalanceOverview()" title="人情收支">💰</div>
     <div class="header-icon" onclick="showChart()" title="统计">📊</div>
-    <div class="header-icon" onclick="exportData()" title="导出">⤓</div>
+    <div class="header-icon" onclick="exportData()" title="导出Excel">⤓</div>
+    <div class="header-icon" onclick="importData()" title="导入Excel">⤒</div>
   </div>
 </div>
+
+<!-- 隐藏的导入文件选择器 -->
+<input type="file" id="importFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleImportFile(this)">
 
 <!-- Banner -->
 <div class="banner">
@@ -471,6 +475,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hira
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
+<script src="xlsx.min.js"></script>
 <script>
 // ============ Data ============
 const STORAGE_KEY = 'fenziqian_data';
@@ -1031,11 +1036,95 @@ function showChart() {
 }
 function closeChart(){document.getElementById('chartModal').classList.remove('show')}
 
+// ============ 分类映射（Excel 友好中文） ============
+const REL_MAP={'relatives':'亲戚','colleagues':'同事','friends':'朋友','classmates':'同学','others':'其他'};
+const REL_REV={'亲戚':'relatives','同事':'colleagues','朋友':'friends','同学':'classmates','其他':'others'};
+const SUB_MAP={'mom':'妈妈亲戚','dad':'爸爸亲戚','inlaw':'婆家亲戚'};
+const SUB_REV={'妈妈亲戚':'mom','爸爸亲戚':'dad','婆家亲戚':'inlaw'};
+const TYPE_MAP={'sent':'人情支出','received':'人情收入'};
+
+// ============ 导出 Excel ============
 function exportData(){
-  const blob=new Blob([JSON.stringify(records,null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob);const a=document.createElement('a');
-  a.href=url;a.download=`份子钱数据_${new Date().toISOString().slice(0,10)}.json`;a.click();
-  URL.revokeObjectURL(url);showToast('数据已导出 ✓');
+  if(typeof XLSX==='undefined'){
+    const blob=new Blob([JSON.stringify(records,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);const a=document.createElement('a');
+    a.href=url;a.download=`份子钱数据_${new Date().toISOString().slice(0,10)}.json`;a.click();
+    URL.revokeObjectURL(url);showToast('已导出 JSON ✓');return;
+  }
+  const headers=['姓名','关系','亲戚分组','类型','金额','日期','状态','备注'];
+  const rows=[headers];
+  records.forEach(r=>{
+    rows.push([
+      r.name,
+      REL_MAP[r.relation]||r.relation,
+      (r.relation==='relatives'&&r.subRelation)?(SUB_MAP[r.subRelation]||''):'',
+      TYPE_MAP[r.type]||r.type,
+      r.amount,
+      r.date,
+      r.type==='received'?'收回':(r.status==='pending'?'待回礼':'已结清'),
+      r.note||''
+    ]);
+  });
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:12},{wch:8},{wch:12},{wch:10},{wch:10},{wch:12},{wch:8},{wch:22}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'份子钱记录');
+  XLSX.writeFile(wb,`份子钱数据_${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast('Excel 已导出 ✓');
+}
+
+// ============ 导入 Excel ============
+function importData(){ document.getElementById('importFile').click(); }
+
+function excelDateToStr(v){
+  if(v instanceof Date) return fmtDate(v);
+  if(typeof v==='number'){ const d=new Date(Math.round((v-25569)*86400)*1000); return fmtDate(d); }
+  const m=String(v).match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  return m?`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`:String(v).trim();
+}
+function fmtDate(d){
+  const y=d.getFullYear(),mo=String(d.getMonth()+1).padStart(2,'0'),da=String(d.getDate()).padStart(2,'0');
+  return `${y}-${mo}-${da}`;
+}
+function nextId(){ return records.length?Math.max(...records.map(r=>r.id))+1:1; }
+
+function handleImportFile(input){
+  const f=input.files[0]; if(!f) return;
+  const reader=new FileReader();
+  reader.onload=(e)=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      if(rows.length<2){ showToast('文件里没有数据'); input.value=''; return; }
+      const headers=rows[0].map(h=>String(h).trim());
+      const idx={}; headers.forEach((h,i)=>idx[h]=i);
+      const get=(row,key)=>{ const i=idx[key]; return i!==undefined?row[i]:''; };
+      const imported=[];
+      for(let i=1;i<rows.length;i++){
+        const row=rows[i]; if(!row||!String(get(row,'姓名')||'').trim()) continue;
+        const type=get(row,'类型')==='人情收入'?'received':'sent';
+        const name=String(get(row,'姓名')).trim();
+        const date=excelDateToStr(get(row,'日期'));
+        const amount=parseFloat(String(get(row,'金额')).replace(/[^\d.]/g,''))||0;
+        const relKey=REL_REV[get(row,'关系')]||'others';
+        const subKey=relKey==='relatives'?(SUB_REV[get(row,'亲戚分组')]||null):null;
+        const statusText=String(get(row,'状态')).trim();
+        const status=type==='received'?'settled':(statusText==='待回礼'?'pending':'settled');
+        imported.push({id:0,name,relation:relKey,subRelation:subKey,amount,type,date,status,note:String(get(row,'备注')||'').trim()});
+      }
+      // 合并去重（按 姓名+日期+金额+类型）
+      let added=0;
+      imported.forEach(r=>{
+        const dup=records.some(x=>x.name===r.name&&x.date===r.date&&x.amount===r.amount&&x.type===r.type);
+        if(!dup){ r.id=nextId(); records.push(r); added++; }
+      });
+      saveData(); renderAll();
+      showToast(added>0?`已导入 ${added} 条新记录 ✓`:'没有新增记录（可能已导入过）');
+    }catch(err){ console.error(err); showToast('导入失败：请确认是导出的 Excel 文件'); }
+    input.value='';
+  };
+  reader.readAsArrayBuffer(f);
 }
 
 // ============ Paste & Recognize ============

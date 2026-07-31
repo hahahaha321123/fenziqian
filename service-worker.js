@@ -1,7 +1,8 @@
-const CACHE = 'fenziqian-v1';
+const CACHE = 'fenziqian-v2';
 const ASSETS = [
   './',
   './index.html',
+  './xlsx.min.js',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
