@@ -1273,21 +1273,48 @@ let parsedRecords=[];
 function renderParsePreview(list){
   parsedRecords=list;
   const el=document.getElementById('parsePreview');
+
+  // Build relation options with sub-categories for relatives
+  const relOptions = CATEGORIES.filter(c=>c.key!=='home').map(c=>{
+    let opts = `<option value="${c.key}" ${r.relation===c.key?'selected':''}>${c.name}</option>`;
+    if(c.key === 'relatives' && r.relation === 'relatives'){
+      SUB_CATEGORIES.forEach(sub => {
+        opts += `<option value="${c.key}|${sub.key}" ${(r.relation+'|'+(r.subRelation||''))===c.key+'|'+sub.key?'selected':''}>　${sub.name}</option>`;
+      });
+    }
+    return opts;
+  }).join('');
+
   el.innerHTML=`<div class="parse-count">已识别 ${list.length} 条，请核对无误后导入：</div>`+
-    list.map((r,i)=>`<div class="parse-item" data-i="${i}">
+    list.map((r,i)=>{
+      const relOpts = CATEGORIES.filter(c=>c.key!=='home').map(c=>{
+        let o = `<option value="${c.key}" ${r.relation===c.key && !r.subRelation?'selected':''}>${c.name}</option>`;
+        if(c.key==='relatives'){
+          o += SUB_CATEGORIES.map(s => `<option value="${c.key}|${s.key}" ${r.relation===c.key&&r.subRelation===s.key?'selected':''}>　${s.name}</option>`).join('');
+        }
+        return o;
+      }).join('');
+      return `<div class="parse-item" data-i="${i}">
       <div class="parse-item-head"><input class="parse-name" value="${escapeHtml(r.name)}" oninput="parsedRecords[${i}].name=this.value"><button class="parse-remove" onclick="removeParsed(${i})">✕</button></div>
-      <div class="parse-row"><div class="parse-field"><label>金额(元)</label><input type="number" value="${r.amount}" oninput="parsedRecords[${i}].amount=Math.max(0,+$this.value)"></div><div class="parse-field"><label>类型</label><select onchange="parsedRecords[${i}].type=this.value"><option value="sent" ${r.type==='sent'?'selected':''}>给出</option><option value="received" ${r.type==='received'?'selected':''}>收回</option></select></div></div>
-      <div class="parse-row"><div class="parse-field"><label>关系</label><select onchange="parsedRecords[${i}].relation=this.value">${CATEGORIES.filter(c=>c.key!=='home').map(c=>`<option value="${c.key}" ${r.relation===c.key?'selected':''}>${c.name}</option>`).join('')}</select></div><div class="parse-field"><label>日期</label><input type="date" value="${r.date}" onchange="parsedRecords[${i}].date=this.value"></div></div>
+      <div class="parse-row"><div class="parse-field"><label>金额(元)</label><input type="number" value="${r.amount}" oninput="parsedRecords[${i}].amount=Math.max(0,+$this.value)"></div><div class="parse-field"><label>类型</label><select onchange="parsedRecords[${i}].type=this.value"><option value="sent" ${r.type==='sent'?'selected':''}>人情支出</option><option value="received" ${r.type==='received'?'selected':''}>人情收入</option></select></div></div>
+      <div class="parse-row"><div class="parse-field"><label>关系</label><select onchange="onParseRelChange(${i},this.value)">${relOpts}</select></div><div class="parse-field"><label>日期</label><input type="date" value="${r.date}" onchange="parsedRecords[${i}].date=this.value"></div></div>
       <div class="parse-row"><div class="parse-field" style="flex:1 1 100%"><label>事由 / 备注</label><input type="text" value="${escapeHtml(r.note||'')}" placeholder="如：结婚、生孩子、满月酒..." oninput="parsedRecords[${i}].note=this.value"></div></div>
-    </div>`).join('')+`<div class="parse-footer"><button class="parse-btn" onclick="confirmImportParsed()">✓ 确认导入 ${list.length} 条</button></div>`;
+    </div>`}).join('')+`<div class="parse-footer"><button class="parse-btn" onclick="confirmImportParsed()">✓ 确认导入 ${list.length} 条</button></div>`;
   setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'end'}),100);
+}
+// Handle relation change in parse preview (split key|subKey)
+function onParseRelChange(i,val){
+  const parts=val.split('|');
+  parsedRecords[i].relation=parts[0]||'others';
+  parsedRecords[i].subRelation=parts[1]||null;
+  renderParsePreview(parsedRecords);
 }
 function removeParsed(i){parsedRecords.splice(i,1);renderParsePreview(parsedRecords);}
 function confirmImportParsed(){
   const valid=parsedRecords.filter(r=>r.name&&r.amount>0);
   if(valid.length===0){showToast('没有可导入的有效记录');return;}
   const maxId=records.length?Math.max(...records.map(r=>r.id))+1:1;
-  valid.forEach((r,idx)=>records.push({id:maxId+idx,name:r.name.trim(),amount:r.amount,type:r.type,status:r.type==='received'?'settled':'pending',date:r.date,note:r.note||'',relation:r.relation}));
+  valid.forEach((r,idx)=>records.push({id:maxId+idx,name:r.name.trim(),amount:r.amount,type:r.type,status:r.type==='received'?'settled':'pending',date:r.date,note:r.note||'',relation:r.relation,subRelation:r.subRelation||null}));
   saveData();closePaste();renderAll();showToast(`成功导入 ${valid.length} 条记录 ✓`);
 }
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39'})[c]);}
