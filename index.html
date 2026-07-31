@@ -518,21 +518,10 @@ function registerSW() {
 function loadData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    records = raw ? JSON.parse(raw) : getSampleData();
-  } catch(e) { records = getSampleData(); }
+    records = raw ? JSON.parse(raw) : [];
+  } catch(e) { records = []; }
 }
 function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify(records)); }
-
-function getSampleData() {
-  return [
-    {id:1, name:'王伯伯', relation:'relatives', subRelation:'dad', amount:2000, type:'sent', date:'2026-04-26', status:'pending', note:'婚礼'},
-    {id:2, name:'李姐', relation:'colleagues', amount:1000, type:'sent', date:'2026-05-31', status:'pending', note:'结婚'},
-    {id:3, name:'张磊', relation:'classmates', amount:800, type:'sent', date:'2026-06-30', status:'pending', note:'婚礼'},
-    {id:4, name:'陈芳', relation:'relatives', subRelation:'mom', amount:500, type:'received', date:'2026-07-27', status:'settled', note:'还礼'},
-    {id:5, name:'刘伟', relation:'colleagues', amount:600, type:'received', date:'2026-07-22', status:'settled', note:'回礼'},
-    {id:6, name:'赵敏', relation:'friends', amount:1200, type:'sent', date:'2026-07-10', status:'settled', note:'满月酒'}
-  ];
-}
 
 // ============ Stats ============
 function renderStats() {
