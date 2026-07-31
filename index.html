@@ -1297,8 +1297,9 @@ function renderParsePreview(list){
       });
 
       return `<div class="parse-item" data-i="${i}">
-      <div class="parse-item-head"><input class="parse-name" value="${escapeHtml(r.name)}" oninput="parsedRecords[${i}].name=this.value"><button class="parse-remove" onclick="removeParsed(${i})">✕</button></div>
+      <div class="parse-item-head"><button class="parse-remove" onclick="removeParsed(${i})">✕</button></div>
       <div class="parse-row"><div class="parse-field"><label>日期</label><input type="date" value="${r.date}" onchange="parsedRecords[${i}].date=this.value"></div></div>
+      <div class="parse-row"><div class="parse-field" style="flex:1 1 100%"><label>姓名</label><input type="text" value="${escapeHtml(r.name)}" oninput="parsedRecords[${i}].name=this.value" placeholder="如：王伯伯"></div></div>
       <div class="parse-row"><div class="parse-field"><label>关系</label><select onchange="onParseRelChange(${i},this.value)">${relOpts}</select></div><div class="parse-field"><label>类型</label><select onchange="parsedRecords[${i}].type=this.value"><option value="sent" ${r.type==='sent'?'selected':''}>人情支出</option><option value="received" ${r.type==='received'?'selected':''}>人情收入</option></select></div></div>
       <div class="parse-row"><div class="parse-field" style="flex:1 1 100%"><label>事由 / 备注</label><input type="text" value="${escapeHtml(r.note||'')}" placeholder="如：结婚、生孩子、满月酒..." oninput="parsedRecords[${i}].note=this.value"></div></div>
       <div class="parse-row"><div class="parse-field"><label>金额(元)</label><input type="number" value="${r.amount}" oninput="parsedRecords[${i}].amount=Math.max(0,+$this.value)"></div></div>
