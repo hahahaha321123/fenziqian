@@ -1151,29 +1151,67 @@ function parsePastedText(){
   renderParsePreview(parsed);
 }
 
+// 常见事由关键词（用于从人名后截取备注）
+const EVENT_KEYWORDS = [
+  '生孩子','满月酒','百日宴','周岁宴','升学宴','乔迁新居','搬家',
+  '结婚','婚礼','订婚','领证','离婚','再婚',
+  '生日','寿宴','大寿','祝寿','过寿',
+  '生病住院','手术','看病','康复',
+  '去世','葬礼','白事','丧事','祭奠',
+  '开业','升职','升迁','调动','退休','离职',
+  '考上大学','毕业','参军','入伍','退伍',
+  '买房','买车','装修','还钱','借钱'
+];
+const PREFIX_KW = ['随','给','送','包','出','转','跟','同'];
+// 中间出现的连接词（从名字中剥离）
+const MID_KW = ['随我','给我','送我','转我','跟我','同我','随了','给了'];
+
+function splitNameAndNote(rawText){
+  // rawText 是年份之后、金额之前的中文部分，如 "随小飞生孩子" 或 "小飞随我生孩子"
+  let s = rawText.trim();
+  // 先去掉前缀动词
+  PREFIX_KW.forEach(k => { if(s.startsWith(k)) s=s.slice(1); });
+  // 去掉中间的连接词（如"小飞随我生孩子" -> "小飞生孩子"）
+  MID_KW.forEach(k => {
+    const idx=s.indexOf(k);
+    if(idx>0) s=s.slice(0,idx)+s.slice(idx+k.length);
+  });
+
+  // 尝试按常见事由关键词切分：找到第一个事由词的位置
+  let bestPos = -1; let foundEvent = '';
+  EVENT_KEYWORDS.forEach(ev => {
+    const idx = s.indexOf(ev);
+    if(idx > 0 && (bestPos < 0 || idx < bestPos)){ bestPos=idx; foundEvent=ev; }
+  });
+
+  if(bestPos > 0){
+    // 找到了事由关键词，前面是人名
+    return {name:s.slice(0,bestPos), note:s.slice(bestPos)};
+  }
+
+  // 没有匹配到事由关键词：尝试按长度推断
+  // 中文姓名通常 2-4 字；超过 4 字的后面部分很可能是事由
+  if(s.length <= 4){ return {name:s, note:''}; }
+  // 超过 4 字时，取前 2-3 字作为名字（常见姓氏+名），剩余为备注
+  // 检查前缀是否是姓氏
+  const surm = s.match(new RegExp('^(['+SURNAMES+'])'));
+  if(surm && s.length >= 5){ return {name:s.slice(0,3), note:s.slice(3)}; }
+  if(s.length >= 6){ return {name:s.slice(0,2), note:s.slice(2)}; }
+  return {name:s.slice(0,3), note:s.slice(3)};
+}
+
 function parseLine(line){
   // Try user's compact format first: "2021随小飞生孩子200" or "2023李姐结婚1000"
-  const compactMatch = line.match(/^(\d{4}|\d{2})([\u4e00-\u9fa5]+)([\u4e00-\u9fa5]*)(\d{1,8})(?:\s*(?:元|块|块钱|圆))?$/);
+  const compactMatch = line.match(/^(\d{4}|\d{2})([\u4e00-\u9fa5]+)(\d{1,8})(?:\s*(?:元|块|块钱|圆))?$/);
   if(compactMatch){
     let year = parseInt(compactMatch[1]);
     year = year < 100 ? (year < 50 ? 2000+year : 1900+year) : year;
-    const rawName = compactMatch[2];
-    const rawNote = compactMatch[3];
-    const amount = Math.round(parseFloat(compactMatch[4]));
+    const rawText = compactMatch[2]; // 年份和金额之间的全部中文
+    const amount = Math.round(parseFloat(compactMatch[3]));
     if(!amount || amount <= 0) return null;
 
-    // Extract name (first char should be surname)
-    const nameMatch = rawName.match(new RegExp('^(['+SURNAMES+'])'));
-    let name = nameMatch ? rawName : rawName; // use full string if no surname match
-
-    // Note: everything after name that's not a keyword
-    let note = rawNote.trim();
-    // Clean up common keywords from note
-    ['随','给','送','礼','份子','转','你','了','包','出'].forEach(kw=>{
-      if(note.startsWith(kw)) note=note.slice(1);
-      if(note.endsWith(kw)) note=note.slice(0,-1);
-    });
-    note = note || '';
+    // 智能拆分 人名 + 备注/事由
+    const {name, note} = splitNameAndNote(rawText);
 
     // Detect type from keywords
     const receivedKw=['还礼','回礼','收到','收了','退回','返还','收礼','收你','给你','入账'];
@@ -1240,6 +1278,7 @@ function renderParsePreview(list){
       <div class="parse-item-head"><input class="parse-name" value="${escapeHtml(r.name)}" oninput="parsedRecords[${i}].name=this.value"><button class="parse-remove" onclick="removeParsed(${i})">✕</button></div>
       <div class="parse-row"><div class="parse-field"><label>金额(元)</label><input type="number" value="${r.amount}" oninput="parsedRecords[${i}].amount=Math.max(0,+$this.value)"></div><div class="parse-field"><label>类型</label><select onchange="parsedRecords[${i}].type=this.value"><option value="sent" ${r.type==='sent'?'selected':''}>给出</option><option value="received" ${r.type==='received'?'selected':''}>收回</option></select></div></div>
       <div class="parse-row"><div class="parse-field"><label>关系</label><select onchange="parsedRecords[${i}].relation=this.value">${CATEGORIES.filter(c=>c.key!=='home').map(c=>`<option value="${c.key}" ${r.relation===c.key?'selected':''}>${c.name}</option>`).join('')}</select></div><div class="parse-field"><label>日期</label><input type="date" value="${r.date}" onchange="parsedRecords[${i}].date=this.value"></div></div>
+      <div class="parse-row"><div class="parse-field" style="flex:1 1 100%"><label>事由 / 备注</label><input type="text" value="${escapeHtml(r.note||'')}" placeholder="如：结婚、生孩子、满月酒..." oninput="parsedRecords[${i}].note=this.value"></div></div>
     </div>`).join('')+`<div class="parse-footer"><button class="parse-btn" onclick="confirmImportParsed()">✓ 确认导入 ${list.length} 条</button></div>`;
   setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'end'}),100);
 }
